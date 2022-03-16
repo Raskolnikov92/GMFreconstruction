@@ -11,11 +11,14 @@ from scipy import fft, fftpack
 
 def make_perc_mask(N):
     #this function does the same as make_random_mask, but you get to chose the percentage of pixels you want to keep.
-    frac = 1e-0 #percentage of pixels kept.
+    frac = 1e-2 #percentage of pixels kept.
     arr = np.asarray([0,1])
     mat = np.zeros(shape = (N,N))
     for i,j in itertools.product(range(N),range(N)):
         mat[i][j] = int(np.asarray(rn.choices(arr, weights=[frac, 1 - frac]))) 
+    N_nonzero = np.count_nonzero(mat)
+    if not N_nonzero > 0:
+        raise ValueError('You must have some datapoints.')
     return mat
 
 def vector_plot(div_cleaned_matx, div_cleaned_maty, div_cleaned_rec_matx, div_cleaned_rec_maty):
@@ -29,7 +32,7 @@ def vector_plot(div_cleaned_matx, div_cleaned_maty, div_cleaned_rec_matx, div_cl
 
     cmap = 'viridis'
         
-    fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(18, 5))    
+    fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(18, 5))    
          
     Bx = div_cleaned_matx
     By = div_cleaned_maty
@@ -37,8 +40,8 @@ def vector_plot(div_cleaned_matx, div_cleaned_maty, div_cleaned_rec_matx, div_cl
     Bx_dir = Bx/B_mag
     By_dir = By/B_mag
 
-    plt.subplot(131)
-    plt.contourf(xx, yy, np.log10(B_mag), cmap=cmap)
+    plt.subplot(121)
+    plt.contourf(xx, yy, B_mag, cmap=cmap)
     plt.colorbar()
     plt.streamplot(x, y, Bx_dir, By_dir, color="black")
     plt.title('Original Vector Field')
@@ -51,25 +54,29 @@ def vector_plot(div_cleaned_matx, div_cleaned_maty, div_cleaned_rec_matx, div_cl
     rec_By_dir = rec_By/rec_B_mag
 
 
-    plt.subplot(132)
-    plt.contourf(xx, yy, np.log10(rec_B_mag), cmap=cmap)
+    plt.subplot(122)
+    plt.contourf(xx, yy, rec_B_mag, cmap=cmap)
     plt.colorbar()
     plt.streamplot(x, y, rec_Bx_dir, rec_By_dir, color="black")
     plt.title('Reconstructed field (div cleaned)')
     plt.axis("image") 
     
-    Bx = Bx - rec_Bx
-    By = By - rec_By
+    """
+    Bx = rec_matx
+    By = rec_maty
     B_mag = np.sqrt(Bx**2 + By**2)
     Bx_dir = Bx/B_mag
     By_dir = By/B_mag
 
     plt.subplot(133)
-    plt.contourf(xx, yy, np.log10(B_mag), cmap=cmap)
+    plt.contourf(xx, yy, B_mag, cmap=cmap)
     plt.colorbar()
     plt.streamplot(x, y, Bx_dir, By_dir, color="black")
-    plt.title('Residual field')
+    plt.title('Not div cleaned reconstruction')
     plt.axis("image")
+    """
+    plt.show()
+    
 
     
 def scalar_plot(mat1, mat2, mat3, mat4):
@@ -107,7 +114,7 @@ def scalar_plot(mat1, mat2, mat3, mat4):
     
     divider = make_axes_locatable(axes[1,1])
     cax = divider.append_axes('right', size='5%', pad=0.05)
-    fig.colorbar(pl4, cax=cax, orientation='vertical')
+    fig.colorbar(pl4, cax=cax, orientation='vertical')    
         
 # Set prior correlation covariance with a power spectrum leading to
 # homogeneous and isotropic statistics
@@ -156,7 +163,7 @@ def divergence(f,sp):
 def main():    
 
     # Number of pixels in N_pixelsxN_pixels grid   
-    N_pixels = 100
+    N_pixels = 1000
     
     # Define the configuration space. Here a square grid.   
     position_space = ift.RGSpace([N_pixels, N_pixels])
@@ -251,7 +258,60 @@ def main():
     #######################
     
     #Vector plot 
-    vector_plot(div_cleaned_matx, div_cleaned_maty, div_cleaned_rec_matx, div_cleaned_rec_maty)
+    
+    
+    args = [div_cleaned_matx, 
+            div_cleaned_maty, 
+            div_cleaned_rec_matx, 
+            div_cleaned_rec_maty]
+    
+    #vector_plot(*args)
+    
+    L = 1
+    
+    # Create Meshgrid
+    x = np.linspace(0, L, N_pixels)
+    y = np.linspace(0, L, N_pixels)
+    xx, yy = np.meshgrid(x, y)
+
+
+    
+    cmap = 'viridis'
+    
+    F = [matx,maty]
+    
+    # Compute Divergence
+    sp_x = np.diff(x)[0]
+    sp_y = np.diff(y)[0]
+    sp = [sp_x, sp_y]
+    
+    mat1 = divergence(F, sp)
+    
+    fig, axes = plt.subplots(1, 2, figsize=(18,5))
+    
+    pl1 = axes[0].imshow(mat1, cmap=cmap)
+    axes[0].set_title('Divergence (before div cleaning)', fontsize=20)
+    axes[0].set(ylabel='Pixel number')
+    axes[0].set(xlabel='Pixel number')
+        
+    divider = make_axes_locatable(axes[0])
+    cax = divider.append_axes('right', size='5%', pad=0.05)
+    fig.colorbar(pl1, cax=cax, orientation='vertical')
+    
+    F = [div_cleaned_matx, div_cleaned_maty]
+    
+    mat2 = divergence(F, sp)
+    
+    pl2 = axes[1].imshow(mat2, cmap=cmap)
+    axes[1].set_title('Divergence (after div cleaning)',fontsize=20)
+    axes[1].set(ylabel='Pixel number')
+    axes[1].set(xlabel='Pixel number')
+    
+    divider = make_axes_locatable(axes[1])
+    cax = divider.append_axes('right', size='5%', pad=0.05)
+    fig.colorbar(pl2, cax=cax, orientation='vertical')
+    plt.show()
+    
       
 if __name__ == '__main__':
     main()
