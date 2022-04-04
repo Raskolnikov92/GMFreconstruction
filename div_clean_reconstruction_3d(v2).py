@@ -16,7 +16,7 @@ import numpy.ma as ma
 
 def make_perc_mask(N):
     #this function does the same as make_random_mask, but you get to chose the percentage of pixels you want to keep.
-    frac = 1e-3 #percentage of pixels kept.
+    frac = 1e-2 #percentage of pixels kept.
     arr = np.asarray([0,1])
     mat = np.zeros(shape = (N,N,N))
     for i,j,k in itertools.product(range(N),range(N),range(N)):
@@ -28,7 +28,7 @@ def make_perc_mask(N):
 def div_clean(dft_mat):
     print('div cleaning procedure starts. May take a while...')
     t = time.time()
-
+    
     N = len(dft_mat[0])
     fft_mat_div_cleaned = np.ones([3, N, N, N], dtype=np.complex_)
     dft_mat = np.array([fftpack.fftshift(dft_mat[0]), fftpack.fftshift(dft_mat[1]), fftpack.fftshift(dft_mat[2])])
@@ -38,14 +38,13 @@ def div_clean(dft_mat):
         inner_product = dft_mat[0][ii][jj][kk]*ii + dft_mat[1][ii][jj][kk]*jj + dft_mat[2][ii][jj][kk]*kk
         if k_norm_sq >= 1e-10:
             c = 1 #rescaling factor
-            for index in range(0,2):
+            for index in range(0,3):
                 fft_mat_div_cleaned[index][ii][jj][kk] = c*(dft_mat[index][ii][jj][kk]  - k[index]*inner_product/k_norm_sq)       
         else:
-            for index in range(0,2):
+            for index in range(0,3):
                 fft_mat_div_cleaned[index][ii][jj][kk] = dft_mat[index][ii][jj][kk]
-    for index in range(0,2):
+    for index in range(0,3):
         fft_mat_div_cleaned[index] = fftpack.ifftshift(fft_mat_div_cleaned[index])
-    
     t = time.time() - t
     print('div cleaning took %.2f seconds' %t)
     return fft_mat_div_cleaned
@@ -93,9 +92,10 @@ def power_spectrum(k):
     output = np.asarray(output)      
     return output
 
+
 def main():   
     # Number of pixels in N_pixelsxN_pixels grid   
-    N_pixels = 100
+    N_pixels = 50
     
     # Define the configuration space. Here a square grid.   
     position_space = ift.RGSpace([N_pixels, N_pixels, N_pixels])
@@ -122,26 +122,26 @@ def main():
     S = ift.DiagonalOperator(prior_correlation_structure)
 
     # Create two Gaussian random fields that have the covariance S specified above
-    mock_signal = np.array([S.draw_sample_with_dtype(dtype=np.float64), S.draw_sample_with_dtype(dtype=np.float64), S.draw_sample_with_dtype(dtype=np.float64)])
-
+    mock_signal = np.array([S.draw_sample_with_dtype(dtype=np.float64), 
+                            S.draw_sample_with_dtype(dtype=np.float64), 
+                            S.draw_sample_with_dtype(dtype=np.float64)])
     
     # Extract the GRF field values as ndarrays
     mat = np.zeros([3, N_pixels, N_pixels, N_pixels], dtype=np.complex_)
     dft_mat = np.zeros([3, N_pixels, N_pixels, N_pixels], dtype=np.complex_)
     div_cleaned_mat = np.zeros([3, N_pixels, N_pixels, N_pixels])
-
-    for index in range(0,2):
+    
+    for index in range(0,3):
         mat[index] = HT(mock_signal[index]).val  
         dft_mat[index] = fftpack.fftn(mat[index])
     
     #divergence clean
     dft_mat = div_clean(dft_mat)
     
-    for index in range(0,2):
+    for index in range(0,3):
         div_cleaned_mat[index] = np.real(fftpack.ifftn(dft_mat[index]))
         mock_signal[index] = HT2(ift.Field.from_raw(position_space, div_cleaned_mat[index]))
-    
-    
+
     # Define response operator
     mask_mat = make_perc_mask(N_pixels)
     mask = ift.Field.from_raw(position_space, mask_mat)
@@ -164,41 +164,47 @@ def main():
     data = []
     j = []
     m = []
-    for index in range(0,2):
+    for index in range(0,3):
         data.append(R(mock_signal[index]) + mock_noise)
         #Define the source
         j.append(R.adjoint_times(N.inverse_times(data[index])))
         # Calculate Wiener filter solution
         m.append(D(j[index]))
-      
+     
     # Make D_inv invertible (via Conjugate Gradient)
     IC = ift.GradientNormController(iteration_limit=500, tol_abs_gradnorm=1e-3)
     D = ift.InversionEnabler(D_inv, IC, approximation=S.inverse).inverse
     
-    rec_mat = np.zeros([3, N_pixels, N_pixels, N_pixels])
+
+    # Initialize matrices
+    rec_mat = np.zeros([3, N_pixels, N_pixels, N_pixels], dtype=np.complex_)
     dft_rec_mat = np.zeros([3, N_pixels, N_pixels, N_pixels], dtype=np.complex_)
     div_cleaned_rec_mat = np.zeros([3, N_pixels, N_pixels, N_pixels])
     
-    # Get ndarray containing values of reconstruction in each pixel
-    for index in range(0,2):
-        rec_mat[index] = HT1(m[index]).val 
-        # Get DFT matrix for each component 
+    for index in range(0,3):
+        rec_mat[index] = HT(m[index]).val  
         dft_rec_mat[index] = fftpack.fftn(rec_mat[index])
-        # Apply the divergence cleaning function
-        dft_rec_mat = div_clean(dft_rec_mat)
-        # Invert the dft matrix after application of the divergence cleaning
+    
+    #divergence clean the reconstruction
+    dft_rec_mat = div_clean(dft_rec_mat)
+    
+    for index in range(0,3):
         div_cleaned_rec_mat[index] = np.real(fftpack.ifftn(dft_rec_mat[index]))
-   
+        
     
     #######################
     #Main part ends here. Below we plot results. 
     #######################
+
     
-    for axis in range(0,3):
-        mat1 = HT(mock_signal[0]).val
-        mat2 = Mask.adjoint(data[0]).val
+    axis = 0
+    
+    for index in range(0,3):
+        mat1 = HT(mock_signal[index]).val
+        mat2 = Mask.adjoint(data[index]).val
         mat2 = ma.masked_values(mat2, 0.)
-        mat3 = div_cleaned_rec_mat[0]
+        
+        mat3 = div_cleaned_rec_mat[index]
         mat4 = mat1 - mat3
         
         mat1 = np.mean(mat1,axis=axis)
@@ -215,10 +221,13 @@ def main():
         
            
         plots(*args)
-                
-    
+
+
+                  
 if __name__ == '__main__':
     t = time.time()
     main() 
     t = time.time() - t
     print('Total running time: %.2f seconds' %t)
+    
+
