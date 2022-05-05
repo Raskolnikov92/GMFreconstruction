@@ -122,6 +122,18 @@ def main():
 
     #data = signal_response(mock_position) + N.draw_sample_with_dtype(dtype=np.float64)
     data = R(mock_signal) + N.draw_sample_with_dtype(dtype=np.float64)
+    
+    """
+    IMPORTING RAW DATA
+    
+    dat_mat = R.adjoint_times(data).val
+    
+    #if the data is given as dat_mat (ndarray with shape (Npixels, Npixels, Npixels)), 
+    #and you know the positions of the voxels with data, (so you know R) then 
+    #the following works
+    data = ift.Field.from_raw(position_space, dat_mat)    
+    data = R(data)
+    """
             
     # Minimization parameters
     ic_sampling = ift.AbsDeltaEnergyController(name="Sampling (linear)",
